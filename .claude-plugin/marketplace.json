@@ -1,0 +1,21 @@
+{
+  "name": "meeting-bots",
+  "owner": {
+    "name": "Karl Certa",
+    "email": "kets1.pro@gmail.com"
+  },
+  "metadata": {
+    "description": "A meeting room for Claude Code. Five AI personas debate your question, the Boss synthesizes, you push back until satisfied.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "meeting-bots",
+      "source": "./plugins/meeting-bots",
+      "description": "AI personas (Boss, Pusher, Rookie, Watcher, Cynic) debate your question. 3 to 10 participants, mix teams (dev, design, product, business, life), add custom personas on the fly. Full debate recorded to a markdown file.",
+      "version": "0.1.0",
+      "category": "productivity",
+      "tags": ["debate", "multi-agent", "decision-making", "personas"]
+    }
+  ]
+}
