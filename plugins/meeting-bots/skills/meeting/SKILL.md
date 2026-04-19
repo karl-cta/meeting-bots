@@ -185,7 +185,7 @@ Spawn **all personas in parallel** with a single assistant message containing N 
 - `description`: `"<custom persona> opening on <short topic>"`
 - `prompt`: Start with the crafted persona system prompt in full (who they are, what they care about, how they argue, blind spots, language, word cap). Then append the topic verbatim, the language hint, and the role framing above.
 
-Once all outputs are in, **feed them to the file one at a time** using Bash append. First, append the round heading:
+Once all outputs are in, **append the entire round in one Bash call**. Build the block in lineup order: round heading, then each persona as its own `### <persona name>` subsection with their output verbatim. Use the `'CHAIR_EOF'` heredoc with quoted delimiter so backticks, dollar signs, and special characters in the persona output stay literal.
 
 ```bash
 cat >> <filepath> <<'CHAIR_EOF'
@@ -193,21 +193,22 @@ cat >> <filepath> <<'CHAIR_EOF'
 ---
 
 ## Round 1, opening statements
+
+### <persona 1 name>
+
+<persona 1 output verbatim>
+
+### <persona 2 name>
+
+<persona 2 output verbatim>
+
+### <persona N name>
+
+<persona N output verbatim>
 CHAIR_EOF
 ```
 
-Then for each persona in the lineup order, append their own subsection with a separate Bash call:
-
-```bash
-cat >> <filepath> <<'CHAIR_EOF'
-
-### <persona name>
-
-<their output verbatim>
-CHAIR_EOF
-```
-
-Always use the `'CHAIR_EOF'` heredoc with quoted delimiter so backticks, dollar signs, and special characters in the persona output stay literal.
+One Bash call per round, not one per persona: this keeps the UI from scrolling with repeated tool invocations.
 
 Do **not** print any of this in the console. Only print: "Round 1 recorded." (in the user's language).
 
@@ -223,7 +224,7 @@ Spawn all personas **in parallel** again. Each receives:
 
 For custom personas, prefix the prompt with the crafted persona system prompt, as in Step 4.
 
-Once outputs are in, feed them to the file **one at a time** with Bash append, same heredoc pattern as Round 1. First the round heading:
+Once outputs are in, append **the entire round in one Bash call**, same single-heredoc pattern as Round 1:
 
 ```bash
 cat >> <filepath> <<'CHAIR_EOF'
@@ -231,10 +232,20 @@ cat >> <filepath> <<'CHAIR_EOF'
 ---
 
 ## Round 2, rebuttals
+
+### <persona 1 name>
+
+<persona 1 output verbatim>
+
+### <persona 2 name>
+
+<persona 2 output verbatim>
+
+### <persona N name>
+
+<persona N output verbatim>
 CHAIR_EOF
 ```
-
-Then each persona separately, in lineup order.
 
 Do **not** print any of this in the console. Only print: "Round 2 recorded." (in the user's language).
 
@@ -253,7 +264,7 @@ Spawn all personas **in parallel** again. Each receives:
 
 For custom personas, prefix the prompt with the crafted persona system prompt, as in earlier rounds.
 
-Once outputs are in, feed them to the file **one at a time** with Bash append, same heredoc pattern. First the round heading:
+Once outputs are in, append **the entire round in one Bash call**, same single-heredoc pattern as rounds 1 and 2:
 
 ```bash
 cat >> <filepath> <<'CHAIR_EOF'
@@ -261,10 +272,20 @@ cat >> <filepath> <<'CHAIR_EOF'
 ---
 
 ## Round 3, closing statements
+
+### <persona 1 name>
+
+<persona 1 output verbatim>
+
+### <persona 2 name>
+
+<persona 2 output verbatim>
+
+### <persona N name>
+
+<persona N output verbatim>
 CHAIR_EOF
 ```
-
-Then each persona separately, in lineup order.
 
 Do **not** print any of this in the console. Only print: "Round 3 recorded." (in the user's language).
 
@@ -326,7 +347,25 @@ cat >> <filepath> <<'CHAIR_EOF'
 CHAIR_EOF
 ```
 
-Now **print the Boss's synthesis in full** in the console. This is the main console output. Above it, print a one-line heading in the user's language (e.g. "Final synthesis:"). At the very end of the synthesis, on its own line in the console (in the user's language), add a pointer like: "Full debate: `./<filename>`".
+### Token report (append after synthesis)
+
+A plugin hook logs every Agent call to `.meeting-bots-tokens.jsonl` in the cwd. The plugin ships a small Python script that aggregates the ledger, appends a `## Token report` section to the transcript, and prints a single `TOKEN_SUMMARY` line on stdout for the console.
+
+Run exactly this one-liner:
+
+```bash
+python3 "$CLAUDE_PLUGIN_ROOT/hooks/report-tokens.py" "<cwd>/.meeting-bots-tokens.jsonl" "<filepath>"
+```
+
+Context for reading the output:
+- `tool_response.usage.input_tokens` from Claude Code only counts **fresh** input tokens. The bulk of the input is routed through the prompt cache and appears in `cache_creation_input_tokens` (first write) and `cache_read_input_tokens` (reuse). The report sums all three as "Input total".
+- `tool_response.total_cost_usd` is often 0 in Claude Code today, so cost is **estimated** from published Anthropic pricing using the model inferred from the persona name (`-boss` is Opus, everything else is Sonnet).
+
+Capture the `TOKEN_SUMMARY` line the script prints. Print **exactly one** compact line to the console in the user's language, using the verbatim numbers, e.g.: "Tokens: 99,586 in / 7,527 out, cost ~0.2410 USD (estimated)".
+
+**Do not** add commentary, caveats, or speculate about completeness. If the ledger was missing or empty, skip the console line entirely (say nothing). Never say "ledger incomplet", "only the synthesis was counted", or anything similar: the hook fires on every Agent call and the numbers are always the full picture.
+
+Now **print the Boss's synthesis in full** in the console. This is the main console output. Above it, print a one-line heading in the user's language (e.g. "Final synthesis:"). After the synthesis, print the token summary line (if any) and a pointer like: "Full debate: `./<filename>`".
 
 ## Step 8: ask for pushback or close
 
@@ -336,10 +375,11 @@ If the user pushes back with content that is not a clear close signal:
 
 1. Treat their contention as a new input.
 2. Spawn all personas in parallel for **one rebuttal round** that explicitly reacts to the user's pushback. Each persona receives the topic, the prior synthesis, and the user's pushback verbatim.
-3. Once outputs are in, append them one at a time via Bash (same `'CHAIR_EOF'` heredoc pattern as earlier rounds). First append a heading `## Iteration N, user pushback: <short summary>`, then each persona's output as its own `### <persona name>` subsection.
+3. Once outputs are in, append the full iteration block in **one Bash call** (same single-heredoc pattern as rounds 1/2/3): first a heading `## Iteration N, user pushback: <short summary>`, then each persona's output as its own `### <persona name>` subsection, all inside a single `cat >> <filepath> <<'CHAIR_EOF' ... CHAIR_EOF`.
 4. Spawn the Boss for a refreshed synthesis that folds in the new round. Append it via Bash under `## Iteration N, synthesis`.
-5. Print only the new synthesis in the console. One status line before: "Iteration N recorded, synthesis below:". At the end: "Full debate: `./<filename>`".
-6. Ask again for pushback or close.
+5. Run the same one-liner as in Step 7, with the iteration-specific heading: `python3 "$CLAUDE_PLUGIN_ROOT/hooks/report-tokens.py" "<cwd>/.meeting-bots-tokens.jsonl" "<filepath>" "Token report, iteration N"`. Capture the `TOKEN_SUMMARY` line for the console output.
+6. Print only the new synthesis in the console. One status line before: "Iteration N recorded, synthesis below:". After the synthesis, print the token summary line (if any) and: "Full debate: `./<filename>`".
+7. Ask again for pushback or close.
 
 Loop until the user closes.
 

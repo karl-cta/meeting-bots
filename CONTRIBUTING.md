@@ -18,6 +18,10 @@ plugins/meeting-bots/
 │   └── plugin.json
 ├── agents/
 │   └── <team>-<archetype>.md   (25 files: 5 teams x 5 archetypes)
+├── hooks/
+│   ├── hooks.json              (PostToolUse:Agent hook registration)
+│   ├── log-tokens.py           (per-call ledger writer, runs async)
+│   └── report-tokens.py        (end-of-meeting aggregation and cost estimate)
 └── skills/
     └── meeting/
         └── SKILL.md
@@ -50,6 +54,18 @@ Drop 5 files, one per archetype:
 Then update the team table in `plugins/meeting-bots/skills/meeting/SKILL.md` to include the new team name and its "For topics about" hint. Add keyword triggers to Step 0's detection list if relevant.
 
 Open an issue first if the team concept is unusual, so we can align on the expertise angle before you invest time in 5 files.
+
+## How to touch the token accounting
+
+The plugin tracks tokens and estimates cost via a PostToolUse hook on the `Agent` tool plus a small aggregation script. Three files:
+
+- `hooks/hooks.json`: registers the hook. `async: true` is load-bearing; without it, every subagent call blocks on the Python startup and meetings slow down visibly.
+- `hooks/log-tokens.py`: runs per Agent call. Reads the hook payload from stdin, pulls `usage` counters out of `tool_response`, appends one JSON line to `.meeting-bots-tokens.jsonl` in the user's cwd. Keep it fast and dependency-free: standard library only.
+- `hooks/report-tokens.py`: called once at the end of each synthesis by the skill. Aggregates the ledger, infers the model from the persona name (`-boss` is Opus, otherwise Sonnet), computes cost from the hard-coded `PRICING` table, appends a `## Token report` Markdown section to the transcript, deletes the ledger, and prints a `TOKEN_SUMMARY` line to stdout that the skill relays to the console.
+
+If Anthropic updates pricing, update the `PRICING` dict in `report-tokens.py`. If you add a new model (e.g. Haiku-based personas), add its entry and extend `model_for()` to recognize the naming convention. If you change the ledger schema, update both scripts in the same PR.
+
+Claude Code does not currently forward `total_cost_usd` or `duration_ms` through the Agent hook payload, which is why cost is estimated rather than reported. If that changes upstream, simplify `report-tokens.py` to use the real value.
 
 ## Style rules (strict)
 

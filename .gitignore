@@ -8,3 +8,10 @@ Thumbs.db
 node_modules/
 .env
 .env.local
+
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+
+.meeting-bots-tokens.jsonl
+/meeting-*.md

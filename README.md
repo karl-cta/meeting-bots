@@ -119,8 +119,9 @@ Chair -> Transcript: ./meeting-saas-launch.md
          Round 3 recorded.
 
          Final synthesis:
-         [Boss, full text, up to 400 words]
+         [Boss, full text, up to 500 words]
 
+         Tokens: 99,586 in / 7,527 out, cost ~0.7725 USD (estimated)
          Full debate: ./meeting-saas-launch.md
 
          Want to push an angle or are you good?
@@ -130,12 +131,25 @@ You  ->  But I have no distribution yet.
 Chair -> Iteration 2 recorded, synthesis below:
          [Boss, updated call]
 
+         Tokens: 38,412 in / 2,980 out, cost ~0.2987 USD (estimated)
+
 You  ->  ok
 
 Chair -> Meeting closed. Full debate: ./meeting-saas-launch.md
 ```
 
 Open the file to see every persona's round 1 opening, round 2 rebuttal, round 3 closing, and the synthesis, cleanly structured. The console is the executive summary, the file is the record.
+
+### Token report
+
+At the end of each synthesis, a `## Token report` table is appended to the transcript with a per-persona row (model, calls, input total, fresh/cache-write/cache-read breakdown, output, estimated cost in USD) plus a totals row. A one-line summary, e.g. `Tokens: 99,586 in / 7,527 out, cost ~0.7725 USD (estimated)`, is printed to the console alongside the synthesis. Iterations get their own report.
+
+Two things to know when reading the numbers:
+
+- **Input total is the real volume**, not just fresh input. Anthropic's API reports fresh input, cache writes, and cache reads as three separate counters. Most of a meeting's input traffic sits in the cache (the persona prompts, the prior rounds), so fresh input alone looks tiny. The report sums all three.
+- **Cost is estimated** from Anthropic public pricing, using the model inferred from the persona name (Opus 4.7 for `-boss`, Sonnet 4.6 for the rest). Claude Code does not currently forward its own cost figure through the hook payload, so the table is a calculated estimate, not a billed amount.
+
+The data comes from a PostToolUse hook on the `Agent` tool that logs each subagent call to a short-lived ledger in your cwd. The hook runs asynchronously (`async: true`), so accounting adds no latency to the meeting itself. The ledger is consumed and deleted at the end of each synthesis. No network calls, no telemetry leaves your machine.
 
 ## Customize
 
