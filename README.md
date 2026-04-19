@@ -21,13 +21,13 @@ Meeting Bots gives you that room, on tap, in Claude Code.
 
 The same five psychologies in every meeting. The expertise changes with the team.
 
-| Archetype | Model      | Role                                                       |
-| --------- | ---------- | ---------------------------------------------------------- |
-| Boss      | Opus 4.7   | Listens, synthesizes, makes the final call                 |
-| Pusher    | Sonnet 4.6 | Bold, pushes the ambitious move                            |
-| Rookie    | Sonnet 4.6 | Asks the naive questions that force clarity                |
-| Watcher   | Sonnet 4.6 | Thinks sideways, surfaces the second-order effects         |
-| Cynic     | Sonnet 4.6 | Teases, cuts through, brings back pragmatism               |
+| Archetype | Model      | Role                                                                    |
+| --------- | ---------- | ----------------------------------------------------------------------- |
+| Boss      | Opus 4.7   | Frames at round 0, silent at round 1, challenges at rounds 2 and 3, synthesizes |
+| Pusher    | Sonnet 4.6 | Bold, pushes the ambitious move                                         |
+| Rookie    | Sonnet 4.6 | Asks the naive questions that force clarity                             |
+| Watcher   | Sonnet 4.6 | Thinks sideways, surfaces the second-order effects                      |
+| Cynic     | Sonnet 4.6 | Teases, cuts through, brings back pragmatism                            |
 
 ## The five teams
 
@@ -104,7 +104,7 @@ The chair drafts the CFO on the spot (role, values, style, blind spots) and incl
 
 ## How a meeting goes
 
-The full debate (personas, 3 rounds: openings, rebuttals, closings) is written to a markdown file in your current directory. **Your console stays clean:** you only see the Boss's final synthesis plus the file path. If you push back, a new iteration is appended to the same file and you see the refreshed synthesis.
+A meeting runs 4 rounds: the Boss frames the debate at round 0 (open angles, no position), the others open at round 1, everyone rebuts at round 2 (Boss rejoins as challenger), everyone closes at round 3, then the Boss synthesizes. The full debate is written to a markdown file in your current directory. **Your console stays clean:** you only see the Boss's final synthesis plus the file path. If you push back, a new iteration is appended to the same file and you see the refreshed synthesis.
 
 ```
 You  ->  /meeting-bots:meeting "I want to launch a SaaS. Where do I start?"
@@ -114,6 +114,7 @@ Chair -> Product team. boss, pusher, rookie, watcher, cynic. OK?
 You  ->  ok
 
 Chair -> Transcript: ./meeting-saas-launch.md
+         Framing recorded.
          Round 1 recorded.
          Round 2 recorded.
          Round 3 recorded.
@@ -121,7 +122,7 @@ Chair -> Transcript: ./meeting-saas-launch.md
          Final synthesis:
          [Boss, full text, up to 500 words]
 
-         Tokens: 99,586 in / 7,527 out, cost ~0.7725 USD (estimated)
+         Tokens: 112,845 in / 7,355 out, cost ~0.8604 USD (estimated)
          Full debate: ./meeting-saas-launch.md
 
          Want to push an angle or are you good?
@@ -138,7 +139,7 @@ You  ->  ok
 Chair -> Meeting closed. Full debate: ./meeting-saas-launch.md
 ```
 
-Open the file to see every persona's round 1 opening, round 2 rebuttal, round 3 closing, and the synthesis, cleanly structured. The console is the executive summary, the file is the record.
+Open the file to see the Boss's round 0 framing, every persona's round 1 opening, round 2 rebuttals (with the Boss's challenges), round 3 closings, and the final synthesis. The console is the executive summary, the file is the record.
 
 ### Token report
 
@@ -180,10 +181,9 @@ Drop 5 files: `<theme>-boss.md`, `<theme>-pusher.md`, `<theme>-rookie.md`, `<the
 
 ## Example output
 
-Two full meetings in the `examples/` folder:
+A full meeting in the `examples/` folder:
 
-- [`examples/saas-launch.md`](./examples/saas-launch.md) (English, `product` team): "I want to launch a SaaS. Where do I start, what do I build first, and how do I know if anyone will pay for it?"
-- [`examples/app-monetisation.md`](./examples/app-monetisation.md) (French, `dev` team): building and monetizing an app, with a stack constraint.
+- [`examples/terraform-vcenter-iac.md`](./examples/terraform-vcenter-iac.md) (French, `dev` team): "I want to integrate Terraform and Ansible to deploy our VMs on our on-prem vCenter, add a GitLab, and train the team". Real meeting, 16 Agent calls, $0.86 estimated cost.
 
 ## License
 
