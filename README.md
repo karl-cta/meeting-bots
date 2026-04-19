@@ -58,49 +58,37 @@ claude --plugin-dir ./plugins/meeting-bots
 
 ## Use it
 
-**One-shot, team auto-detected from your question:**
+**Auto-detect team from your question:**
 
 ```
 /meeting-bots:meeting "I want to launch a SaaS. Where do I start, what do I build first, and how do I know if anyone will pay for it?"
 ```
 
-The plugin picks the right team, convenes the lineup, asks you to confirm or override, runs the rounds, the Boss delivers the call. You push back, it relaunches until you say stop.
+The plugin picks the team, convenes the lineup, asks you to confirm or override, runs the rounds, the Boss delivers the call. You push back, it relaunches until you say stop.
 
-**Pick the team yourself:**
-
-```
-/meeting-bots:meeting "Should I take the Dublin offer or stay put?" --team life
-```
-
-**Custom lineup, mix across teams (3 to 10 personas):**
+**Force a team:**
 
 ```
-/meeting-bots:meeting "Should we rebuild the onboarding flow?" --agents product-boss,design-pusher,product-rookie,dev-watcher,product-cynic
+/meeting-bots:meeting "..." --team life
 ```
 
+**Custom lineup, mix teams (3 to 10 personas):**
+
 ```
-/meeting-bots:meeting "Big strategic pivot?" --agents business-boss,business-pusher,life-rookie,product-watcher,business-cynic,design-watcher
+/meeting-bots:meeting "..." --agents product-boss,design-pusher,product-rookie,dev-watcher,product-cynic
 ```
 
 **Add a custom persona on the fly:**
 
-```
-/meeting-bots:meeting "Should we raise a seed round?"
-```
-
-At the confirm step, say something like:
-
-```
-Add a CFO obsessed with burn rate.
-```
-
-The chair drafts the CFO on the spot (role, values, style, blind spots) and includes them in the lineup. No plugin files touched.
+Run `/meeting-bots:meeting "..."` then at the confirm step say something like `Add a CFO obsessed with burn rate` (or `Make the CFO the Boss` if you want them to synthesize). The chair drafts them on the spot (role, values, style, blind spots). No plugin files touched.
 
 **Full interactive wizard (no args):**
 
 ```
 /meeting-bots:meeting
 ```
+
+Real, tested commands with full transcripts are in the [Example output](#example-output) section below.
 
 ## How a meeting goes
 
@@ -143,47 +131,44 @@ Open the file to see the Boss's round 0 framing, every persona's round 1 opening
 
 ### Token report
 
-At the end of each synthesis, a `## Token report` table is appended to the transcript with a per-persona row (model, calls, input total, fresh/cache-write/cache-read breakdown, output, estimated cost in USD) plus a totals row. A one-line summary, e.g. `Tokens: 99,586 in / 7,527 out, cost ~0.7725 USD (estimated)`, is printed to the console alongside the synthesis. Iterations get their own report.
+At the end of each synthesis, a `## Token report` table is appended to the transcript with a per-persona row (model, calls, input total, fresh/cache-write/cache-read breakdown, output, estimated cost in USD) plus a totals row. A one-line summary (`Tokens: 99,586 in / 7,527 out, cost ~0.7725 USD (estimated)`) is printed to the console alongside the synthesis. Iterations get their own report.
 
-Two things to know when reading the numbers:
+- **Input total is the real volume**, not just fresh input. Most of a meeting's input sits in the prompt cache (persona prompts, prior rounds). The report sums fresh + cache writes + cache reads.
+- **Cost is estimated** from Anthropic public pricing (Opus 4.7 for `-boss`, Sonnet 4.6 for the rest). Claude Code does not currently forward its own cost figure through the hook payload, so the table is a calculated estimate.
 
-- **Input total is the real volume**, not just fresh input. Anthropic's API reports fresh input, cache writes, and cache reads as three separate counters. Most of a meeting's input traffic sits in the cache (the persona prompts, the prior rounds), so fresh input alone looks tiny. The report sums all three.
-- **Cost is estimated** from Anthropic public pricing, using the model inferred from the persona name (Opus 4.7 for `-boss`, Sonnet 4.6 for the rest). Claude Code does not currently forward its own cost figure through the hook payload, so the table is a calculated estimate, not a billed amount.
+No network calls, no telemetry leaves your machine. Hook internals are documented in [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-The data comes from a PostToolUse hook on the `Agent` tool that logs each subagent call to a short-lived ledger in your cwd. The hook runs asynchronously (`async: true`), so accounting adds no latency to the meeting itself. The ledger is consumed and deleted at the end of each synthesis. No network calls, no telemetry leaves your machine.
+## Extend the plugin
 
-## Customize
-
-Two levels of customization, depending on whether you want the change to stick.
-
-### At runtime (no plugin edit)
-
-Happens inside a meeting, no files touched. Use it when you want a one-shot tweak for a specific question.
-
-- **Mix teams**: pass `--agents product-boss,dev-pusher,life-rookie,business-watcher,product-cynic` to pull personas from any team.
-- **Resize the meeting**: any lineup from 3 to 10 personas works. Smaller goes faster. Larger explores more angles at token cost.
-- **Add a custom persona in natural language**: at the confirm step, say "add a CFO obsessed with burn rate" or "add a paranoid DPO from a healthcare startup". The chair crafts their prompt on the spot and includes them in the round.
-- **Designate a custom Boss**: if you want your custom persona to synthesize, tell the chair explicitly ("make the CFO the Boss").
-
-### Permanent (add to the plugin)
-
-Ship a new persona or team that others can use too.
-
-**Add a persona:**
-
-1. Drop a new file in `plugins/meeting-bots/agents/`, following the pattern `<team>-<archetype>.md`.
-2. Frontmatter (`name`, `description`, `model`, `tools`, `color`) and a system prompt that fits the archetype's psychology with your team's expertise.
-3. Use it: `/meeting-bots:meeting "..." --agents your-new-agent,dev-pusher,...`
-
-**Add a whole new team:**
-
-Drop 5 files: `<theme>-boss.md`, `<theme>-pusher.md`, `<theme>-rookie.md`, `<theme>-watcher.md`, `<theme>-cynic.md`. Update the SKILL.md team table. Done.
+Ship a new persona, a whole new team, or tweak the hooks: see [CONTRIBUTING.md](./CONTRIBUTING.md) for the file layout, frontmatter rules, and style guardrails.
 
 ## Example output
 
-A full meeting in the `examples/` folder:
+Full meetings in the `examples/` folder, each produced by the exact command shown:
 
-- [`examples/terraform-vcenter-iac.md`](./examples/terraform-vcenter-iac.md) (French, `dev` team): "I want to integrate Terraform and Ansible to deploy our VMs on our on-prem vCenter, add a GitLab, and train the team". Real meeting, 16 Agent calls, $0.86 estimated cost.
+**[`examples/rest-or-push.md`](./examples/rest-or-push.md)** (English, 3 agents, life team)
+
+```
+/meeting-bots:meeting "I have two weeks off coming up. Should I rest, or push hard on my side project?" --agents life-boss,life-pusher,life-cynic
+```
+
+Minimal lineup on a binary life decision. 10 Agent calls, $0.71 estimated cost.
+
+**[`examples/vibe-code-saas.md`](./examples/vibe-code-saas.md)** (English, 5 agents, dev team auto-detected)
+
+```
+/meeting-bots:meeting "I want to vibe code a SaaS end-to-end: a simple invoicing tool for freelancers who hate Stripe's dashboard. I'll direct the AI but I'm not a pro dev. Before I write a line, help me plan: what technical constraints to lock in upfront, what to build first, where I need to make the call myself rather than let the AI decide, and how I avoid the 'works on my laptop, dies in prod' trap."
+```
+
+Full default team, auto-detected dev, realistic non-dev-founder scenario. 16 Agent calls, $0.87 estimated cost.
+
+**[`examples/freelance-transition.md`](./examples/freelance-transition.md)** (English, 5 agents, cross-team business + life)
+
+```
+/meeting-bots:meeting "I want to go freelance this year. How do I line up my first clients and my finances without burning out?" --agents business-boss,business-pusher,life-rookie,business-watcher,life-cynic
+```
+
+Mixed lineup: business-boss decides, life-rookie and life-cynic keep the burnout question alive while business voices handle pipeline, entity, and contracts. 16 Agent calls, $0.75 estimated cost.
 
 ## License
 

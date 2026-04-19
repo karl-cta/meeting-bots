@@ -12,6 +12,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/finalize-tokens.py",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

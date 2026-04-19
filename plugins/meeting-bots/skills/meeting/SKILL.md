@@ -1,7 +1,7 @@
 ---
 name: meeting
 description: Convene a meeting of AI personas (3 to 10 participants) who debate a subject and reach a synthesis. Teams adapt to the theme (dev, design, product, business, life). The user can mix teams, add custom personas on the fly, and size the meeting up or down. Full debate written to a markdown file in the current directory, only the Boss's final synthesis is shown in the console.
-argument-hint: ["<topic>"] [--team dev|design|product|business|life] [--agents a,b,c,...]
+argument-hint: '["<topic>"] [--team dev|design|product|business|life] [--agents a,b,c,...]'
 disable-model-invocation: true
 allowed-tools: Agent, Write, Bash
 ---
@@ -165,6 +165,8 @@ Before spawning any agent, create the transcript file.
 
 <full topic, verbatim>
 ```
+
+4. Reset the token ledger for this meeting. Use the `Write` tool to create or overwrite `<cwd>/.meeting-bots-tokens.jsonl` with empty content (`""`). A plugin hook appends one JSON line to this file for every Agent call; resetting it here ensures the end-of-meeting token report only counts calls from this meeting, even if a previous meeting left a stale ledger in the cwd.
 
 Tell the user one line in the console: "Transcript: `./<filename>`".
 
@@ -417,103 +419,11 @@ cat >> <filepath> <<'CHAIR_EOF'
 CHAIR_EOF
 ```
 
-### Token report (append after synthesis)
+### Print the synthesis, then close the turn
 
-A plugin hook logs every Agent call to `.meeting-bots-tokens.jsonl` in the cwd. Aggregate the ledger, append a `## Token report` section to the transcript, delete the ledger, and print a single `TOKEN_SUMMARY` line on stdout for the console. Run exactly this Bash block (inline Python, no external script dependency, no env var required):
+**Print the Boss's synthesis in full in the console**, as soon as it is appended to the transcript. Above it, print a one-line heading in the user's language (e.g. "Final synthesis:"). After the synthesis, print: "Full debate: `./<filename>`".
 
-```bash
-python3 - "<cwd>/.meeting-bots-tokens.jsonl" "<filepath>" "Token report" <<'PY'
-import json, pathlib, sys
-
-PRICING = {
-    "opus-4.7":   {"in": 15.0, "cache_w": 18.75, "cache_r": 1.50, "out": 75.0},
-    "sonnet-4.6": {"in":  3.0, "cache_w":  3.75, "cache_r": 0.30, "out": 15.0},
-}
-
-def model_for(raw):
-    name = raw.split(":", 1)[-1] if ":" in raw else raw
-    return "opus-4.7" if name.endswith("-boss") else "sonnet-4.6"
-
-def cost_for(model, fresh, cw, cr, out):
-    p = PRICING[model]
-    return (fresh*p["in"] + cw*p["cache_w"] + cr*p["cache_r"] + out*p["out"]) / 1_000_000
-
-ledger = pathlib.Path(sys.argv[1])
-transcript = pathlib.Path(sys.argv[2])
-heading = sys.argv[3] if len(sys.argv) > 3 else "Token report"
-
-if not ledger.exists():
-    sys.exit(0)
-
-rows = []
-for line in ledger.read_text().splitlines():
-    s = line.strip()
-    if not s:
-        continue
-    try:
-        rows.append(json.loads(s))
-    except Exception:
-        pass
-
-if not rows:
-    ledger.unlink(missing_ok=True)
-    sys.exit(0)
-
-per = {}
-for r in rows:
-    name = r.get("subagent_type", "unknown")
-    p = per.setdefault(name, {"calls": 0, "fresh": 0, "out": 0, "cache_w": 0, "cache_r": 0})
-    p["calls"] += 1
-    p["fresh"] += r.get("input_tokens", 0) or 0
-    p["out"] += r.get("output_tokens", 0) or 0
-    p["cache_w"] += r.get("cache_creation_input_tokens", 0) or 0
-    p["cache_r"] += r.get("cache_read_input_tokens", 0) or 0
-
-totals = {"calls": 0, "fresh": 0, "cache_w": 0, "cache_r": 0, "out": 0, "cost": 0.0}
-rows_out = []
-for name in sorted(per.keys()):
-    p = per[name]
-    model = model_for(name)
-    c = cost_for(model, p["fresh"], p["cache_w"], p["cache_r"], p["out"])
-    total_in = p["fresh"] + p["cache_w"] + p["cache_r"]
-    rows_out.append((name, model, p["calls"], total_in, p["fresh"], p["cache_w"], p["cache_r"], p["out"], c))
-    for k in ("calls", "fresh", "cache_w", "cache_r", "out"):
-        totals[k] += p[k]
-    totals["cost"] += c
-total_in_all = totals["fresh"] + totals["cache_w"] + totals["cache_r"]
-
-lines = [
-    "",
-    "---",
-    "",
-    f"## {heading}",
-    "",
-    "Cost is **estimated** from Anthropic public pricing (Opus 4.7 for `-boss`, Sonnet 4.6 for the others). Input total = fresh + cache write + cache read.",
-    "",
-    "| Persona | Model | Calls | Input total | Fresh | Cache write | Cache read | Output | Cost (USD) |",
-    "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
-]
-for name, model, calls, total_in, fresh, cw, cr, out, c in rows_out:
-    lines.append(f"| {name} | {model} | {calls} | {total_in:,} | {fresh:,} | {cw:,} | {cr:,} | {out:,} | {c:.4f} |")
-lines.append(f"| **Total** | | {totals['calls']} | **{total_in_all:,}** | **{totals['fresh']:,}** | **{totals['cache_w']:,}** | **{totals['cache_r']:,}** | **{totals['out']:,}** | **{totals['cost']:.4f}** |")
-lines.append("")
-
-with transcript.open("a") as f:
-    f.write("\n".join(lines) + "\n")
-ledger.unlink(missing_ok=True)
-print(f"TOKEN_SUMMARY total_in={total_in_all} total_out={totals['out']} cost={totals['cost']:.4f}")
-PY
-```
-
-Context for reading the output:
-- `tool_response.usage.input_tokens` from Claude Code only counts **fresh** input tokens. The bulk of the input is routed through the prompt cache and appears in `cache_creation_input_tokens` (first write) and `cache_read_input_tokens` (reuse). The report sums all three as "Input total".
-- `tool_response.total_cost_usd` is often 0 in Claude Code today, so cost is **estimated** from published Anthropic pricing using the model inferred from the persona name (`-boss` is Opus, everything else is Sonnet).
-
-Capture the `TOKEN_SUMMARY` line the script prints. Print **exactly one** compact line to the console in the user's language, using the verbatim numbers, e.g.: "Tokens: 99,586 in / 7,527 out, cost ~0.2410 USD (estimated)".
-
-**Do not** add commentary, caveats, or speculate about completeness. If the ledger was missing or empty, skip the console line entirely (say nothing). Never say "ledger incomplet", "only the synthesis was counted", or anything similar: the hook fires on every Agent call and the numbers are always the full picture.
-
-Now **print the Boss's synthesis in full** in the console. This is the main console output. Above it, print a one-line heading in the user's language (e.g. "Final synthesis:"). After the synthesis, print the token summary line (if any) and a pointer like: "Full debate: `./<filename>`".
+Do not run any token accounting yourself. A plugin `Stop` hook (`hooks/finalize-tokens.py`) fires after your turn ends, aggregates `.meeting-bots-tokens.jsonl`, appends a `## Token report` section to the transcript, deletes the ledger, and surfaces a one-line token summary to the user through `systemMessage`. You do not read the ledger, you do not call any script, you do not print a token line. The hook owns the entire token report lifecycle.
 
 ## Step 9: ask for pushback or close
 
@@ -525,9 +435,8 @@ If the user pushes back with content that is not a clear close signal:
 2. Spawn **all non-Boss personas in parallel** for **one rebuttal round** that explicitly reacts to the user's pushback. The Boss stays silent. Each non-Boss persona receives the topic, the prior synthesis, and the user's pushback verbatim.
 3. Once outputs are in, append the full iteration block in **one Bash call** (same single-heredoc pattern as rounds 1/2/3): first a heading `## Iteration N, user pushback: <short summary>`, then each persona's output as its own `### <persona name>` subsection, all inside a single `cat >> <filepath> <<'CHAIR_EOF' ... CHAIR_EOF`.
 4. Spawn the Boss for a refreshed synthesis that folds in the new round. Same structural constraint as Step 8: build on what emerged, not on the angles framed earlier. Append it via Bash under `## Iteration N, synthesis`.
-5. Run the same inline Python block as in Step 8, passing `"Token report, iteration N"` as the third argument instead of `"Token report"`. Capture the `TOKEN_SUMMARY` line for the console output.
-6. Print only the new synthesis in the console. One status line before: "Iteration N recorded, synthesis below:". After the synthesis, print the token summary line (if any) and: "Full debate: `./<filename>`".
-7. Ask again for pushback or close.
+5. Print the new synthesis in the console. One status line before: "Iteration N recorded, synthesis below:". After the synthesis, print: "Full debate: `./<filename>`". Do not run any token accounting: the `Stop` hook handles it automatically after your turn ends, numbering successive reports as "Token report, iteration 1", "Token report, iteration 2", etc.
+6. Ask again for pushback or close.
 
 Loop until the user closes.
 
